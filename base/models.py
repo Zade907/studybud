@@ -18,6 +18,10 @@ class Room(models.Model):
     updated = models.DateTimeField(auto_now = True) #whenever updated it will change to curr time 
     create = models.DateTimeField(auto_now_add = True) #when created will set to curr time and not update
 
+
+    class Meta:
+        ordering = ['-updated', '-create']
+
     def __str__(self):
         return self.name
     
