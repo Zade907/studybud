@@ -1,22 +1,64 @@
 from django.shortcuts import render, redirect 
-from .models import Room,Topic
-from .forms import RoomForm 
+from django.db.models import Q #importing Q object for complex queries
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User #importing user model
+from django.contrib import messages #for flash messages
+from django.contrib.auth import authenticate, login, logout #importing authentication functions
+from .models import Room,Topic 
+from .forms import RoomForm #importing RoomForm
+from django.http import HttpResponse
 
 # rooms = [
 #     {'id': 1, 'name': 'Lets study python'},
 #     {'id': 2, 'name': 'Design with me'},
 #     {'id': 3, 'name': 'Frontend developers'},
 # ]
+# ]
 
 # Create your views here.
+
+def loginPage(request):
+
+    if request.user.is_authenticated:
+        return redirect('home')
+    
+    if request.method == 'POST':
+        username = request.POST.get('username') #get username from the html form 
+        password = request.POST.get('password') #get password from the html form
+
+        try:
+            user = User.objects.get(username = username) #check if user exists
+        except:
+            messages.error(request, 'User does not exist')  #display error message if user does not exist
+        
+        user = authenticate(request, username = username, password = password) #authenticate user
+
+        if user is not None:
+            login(request, user)
+            return redirect('home')
+        else:
+            messages.error(request,'Username or password does not exist')
+        
+    context = {}
+    return render(request, 'base/login_register.html', context )
+
+def LogoutUser(request):
+    logout(request)
+    return redirect('home')
+
 def home(request):
     q = request.GET.get('q') if request.GET.get('q') != None else ''
 
-    rooms = Room.objects.filter(topic__name__icontains = q)  #get all rooms from db with the query parameter
+    rooms = Room.objects.filter(
+        Q(topic__name__icontains = q) |
+        Q(name__icontains = q)|
+        Q(description__icontains = q)
+        )  #get all rooms from db with the query parameter
 
     topics = Topic.objects.all()
+    room_count = rooms.count()
 
-    context = {'rooms' : rooms, 'topics': topics}
+    context = {'rooms' : rooms, 'topics': topics, 'room_count': room_count}
     return render(request, 'base/home.html', context)
 
 def room(request, pk):
@@ -25,6 +67,7 @@ def room(request, pk):
 
     return render(request, 'base/room.html',context)
 
+@login_required(login_url = 'login')
 def createRoom(request):
     form = RoomForm()
     if request.method == 'POST':
@@ -35,9 +78,14 @@ def createRoom(request):
     context = {'form': form}
     return render(request, 'base/room_form.html', context)
 
+
+@login_required(login_url = 'login')
 def updateRoom(request,pk):
     room = Room.objects.get(id = pk)
     form = RoomForm(instance = room)
+
+    if request.user != room.host:
+        return HttpResponse('You are not allowed here!!')
 
     if request.method == 'POST':
         form = RoomForm(request.POST, instance = room)
@@ -48,9 +96,15 @@ def updateRoom(request,pk):
     context = {'form': form}
     return render(request, 'base/room_form.html', context)
 
+
+@login_required(login_url = 'login')
 def deleteRoom(request, pk):
     room = Room.objects.get(id = pk)
     context = {'obj': room}
+
+    if request.user != room.host:
+        return HttpResponse('You are not allowed here!!')
+    
     if request.method == 'POST':
         room.delete()
         return redirect('home')
